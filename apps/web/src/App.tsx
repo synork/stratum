@@ -272,50 +272,69 @@ function MarkdownMessage(props: { content: string }) {
 
 function ReasoningPart(props: { item: TranscriptItem }) {
   return (
-    <details
-      data-component="reasoning-part"
-      data-running={props.item.status === "running" ? "true" : "false"}
-      open={props.item.status === "running"}
-    >
-      <summary data-slot="reasoning-trigger">
-        <span data-slot="reasoning-indicator" />
-        <span class="thinking-label">Reasoning{props.item.status === "running" ? " in progress" : ""}</span>
-      </summary>
-      <div data-slot="reasoning-content">
+    <Show when={props.item.text}>
+      <div data-component="reasoning-part" data-running={props.item.status === "running" ? "true" : "false"}>
         <MarkdownMessage content={props.item.text || "Waiting for model-provided reasoning…"} />
       </div>
-    </details>
+    </Show>
   );
 }
 
 function ToolActivity(props: { item: TranscriptItem }) {
+  const [open, setOpen] = createSignal(props.item.status === "running");
   return (
-    <details data-component="tool-trigger" data-state={props.item.status ?? "complete"} open={props.item.status === "running"}>
-      <summary data-slot="basic-tool-tool-trigger-content">
-        <span data-slot="basic-tool-tool-indicator">
-          <span data-slot="tool-status-dot" />
-        </span>
-        <span data-slot="basic-tool-tool-info">
-          <span data-slot="basic-tool-tool-info-main">
-            <strong data-slot="basic-tool-tool-title">{props.item.text}</strong>
-            {props.item.status === "running" && <span data-slot="basic-tool-tool-subtitle">running</span>}
-            {props.item.status === "error" && <span data-slot="basic-tool-tool-subtitle">error</span>}
+    <div data-component="tool-part-wrapper" data-timeline-part-id={props.item.id}>
+      <details
+        data-component="tool-trigger"
+        data-state={props.item.status ?? "complete"}
+        data-clickable="true"
+        open={open()}
+        onToggle={(event) => setOpen(event.currentTarget.open)}
+      >
+        <summary data-slot="basic-tool-tool-trigger-content">
+          <span data-slot="basic-tool-tool-indicator">
+            <span
+              data-slot="tool-status-dot"
+              style={
+                props.item.status === "running"
+                  ? { "animation": "pulse-dot 1.6s ease-in-out infinite" }
+                  : undefined
+              }
+            />
           </span>
-        </span>
-        <span data-slot="basic-tool-tool-action">+</span>
-      </summary>
-      <Show when={props.item.detail}>
-        <pre data-component="tool-output">{props.item.detail}</pre>
-      </Show>
-    </details>
+          <div data-slot="basic-tool-tool-info">
+            <div data-slot="basic-tool-tool-info-structured">
+              <div data-slot="basic-tool-tool-info-main">
+                <span data-slot="basic-tool-tool-title">{props.item.text}</span>
+                {props.item.status === "running" && <span data-slot="basic-tool-tool-subtitle">running</span>}
+                {props.item.status === "error" && <span data-slot="basic-tool-tool-subtitle">error</span>}
+              </div>
+              <Show when={props.item.status !== "running"}>
+                <span data-slot="basic-tool-tool-action">+</span>
+              </Show>
+            </div>
+          </div>
+        </summary>
+        <Show when={props.item.detail}>
+          <pre data-component="tool-output" data-scrollable>
+            {props.item.detail}
+          </pre>
+        </Show>
+      </details>
+    </div>
   );
 }
 
 function UserMessage(props: { item: TranscriptItem }) {
   return (
-    <article data-component="user-message">
+    <article data-component="user-message" data-message-id={props.item.id}>
       <div data-slot="user-message-body">
         <div data-slot="user-message-text">{props.item.text}</div>
+      </div>
+      <div data-slot="user-message-meta">
+        <div data-slot="user-message-meta-wrap">
+          <span data-slot="user-message-meta-tail" />
+        </div>
       </div>
     </article>
   );
@@ -323,10 +342,21 @@ function UserMessage(props: { item: TranscriptItem }) {
 
 function AssistantMessage(props: { item: TranscriptItem }) {
   return (
-    <article data-component="text-part">
-      <div data-slot="text-part-body">
-        <MarkdownMessage content={props.item.text || "Preparing response…"} />
+    <article data-component="assistant-message" data-message-id={props.item.id}>
+      <div data-component="text-part">
+        <div data-slot="text-part-body">
+          <MarkdownMessage content={props.item.text || "Preparing response…"} />
+        </div>
+        {props.item.status === "running" && (
+          <div data-slot="text-part-copy-wrapper" data-running="true">
+            <span class="running-label">
+              <StatusDot state="running" />
+              working
+            </span>
+          </div>
+        )}
       </div>
+      <div data-slot="message-part-meta" />
     </article>
   );
 }
