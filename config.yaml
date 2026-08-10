@@ -1,0 +1,23 @@
+name: Stratum
+version: "0.1.0"
+slug: loom
+description: AI automation and dashboard workbench for Home Assistant
+panel_title: Stratum
+arch:
+  - amd64
+  - aarch64
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:transit-connection-variant
+homeassistant_api: true
+hassio_api: true
+map:
+  - app_config:rw
+options:
+  log_level: info
+  ha_frontend_url: http://homeassistant:8123
+schema:
+  log_level: list(trace|debug|info|warn|error)
+  ha_frontend_url: url
+  github_token: password?
