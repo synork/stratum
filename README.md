@@ -1,5 +1,7 @@
 # Stratum
 
+[![Add app repository on My Home Assistant](https://my.home-assistant.io/badges/add_repository.svg)](https://my.home-assistant.io/redirect/add_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fsynork%2Fstratum)
+
 Stratum is a personal Home Assistant automation and dashboard workbench made by Synork. It combines a constrained AI agent, a complete local entity index, reviewable changes, and visual dashboard inspection.
 
 The interaction shell is adapted from OpenCode's MIT-licensed web application patterns. Stratum is an independent project and is not affiliated with the OpenCode team.
