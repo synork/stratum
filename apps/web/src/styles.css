@@ -272,23 +272,24 @@
   user-select: none;
 }
 
-.lcn-titlebar-logo {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  color: var(--v2-icon-icon-base);
-}
-
 .lcn-titlebar-tabs {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 0 8px;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.lcn-titlebar-home {
+  flex-shrink: 0;
+}
+
+.lcn-titlebar-add {
+  flex-shrink: 0;
+  margin-left: 2px;
 }
 
 .lcn-titlebar-tabs::-webkit-scrollbar {
@@ -386,13 +387,14 @@
   isolation: isolate;
 }
 
-.lcn-main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 480px;
+.lcn-shell {
+  min-width: 0;
   min-height: 0;
+  display: flex;
 }
 
 .lcn-workbench {
+  flex: 1;
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -424,12 +426,24 @@
   gap: 20px;
 }
 
-/* Welcome */
-.lcn-welcome {
-  margin: 0 auto;
-  padding-top: clamp(48px, 16vh, 160px);
-  text-align: center;
-  animation: lcn-enter 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+/* New-session view — mirrors OpenCode new-session design */
+.lcn-new-session {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--v2-background-bg-deep);
+}
+
+.lcn-new-session-inner {
+  position: absolute;
+  inset-inline: 0;
+  top: 25.375%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 24px;
 }
 
 .lcn-wordmark {
@@ -438,7 +452,8 @@
   line-height: 0.9;
   font-weight: 640;
   letter-spacing: -0.09em;
-  color: var(--v2-text-text-base);
+  color: var(--v2-background-bg-inverse);
+  text-align: center;
 }
 
 .lcn-wordmark-accent {
@@ -453,6 +468,14 @@
   font-weight: 520;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  text-align: center;
+}
+
+.lcn-composer-wrap--new {
+  width: min(720px, 100%);
+  margin-top: 36px;
+  padding: 0;
+  background: transparent;
 }
 
 /* Message parts — OpenCode data-slot contracts */
@@ -893,14 +916,15 @@
   min-height: 88px;
   width: 100%;
   overflow: clip;
-  border: 0;
-  border-radius: 12px;
+  border: 0.5px solid var(--v2-border-border-base);
+  border-radius: 10px;
   background: var(--v2-background-bg-layer-01);
   box-shadow: var(--v2-elevation-raised);
-  transition: box-shadow 180ms ease;
+  transition: box-shadow 180ms ease, border-color 180ms ease;
 }
 
 .lcn-composer:focus-within {
+  border-color: var(--v2-border-border-strong);
   box-shadow: var(--v2-elevation-floating);
 }
 
@@ -1036,12 +1060,32 @@
 
 /* ───────────────────────── evidence rail ───────────────────────── */
 
-.lcn-rail {
-  min-height: 0;
+.lcn-sidepanel {
+  position: fixed;
+  top: 36px;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  width: min(460px, 100vw);
   overflow-y: auto;
   border-left: 0.5px solid var(--v2-border-border-muted);
   background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-overlay);
+  transform: translateX(100%);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
   scrollbar-width: thin;
+}
+
+.lcn-sidepanel[data-open="true"] {
+  transform: translateX(0);
+}
+
+.lcn-scrim {
+  position: fixed;
+  inset: 36px 0 0;
+  z-index: 49;
+  background: var(--v2-overlay-simple-overlay-scrim);
+  border: 0;
 }
 
 .lcn-rail-head {
@@ -1748,19 +1792,9 @@
   gap: 7px;
 }
 
-@media (max-width: 1100px) {
-  .lcn-main-grid {
-    grid-template-columns: 1fr 380px;
-  }
-}
-
 @media (max-width: 860px) {
-  .lcn-main-grid {
-    display: block;
-  }
-
-  .lcn-rail {
-    display: none;
+  .lcn-sidepanel {
+    width: 100vw;
   }
 }
 

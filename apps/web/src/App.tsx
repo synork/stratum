@@ -383,6 +383,7 @@ export function App() {
   const [threadHistory, setThreadHistory] = createSignal<ThreadSummary[]>([]);
   const [memories, setMemories] = createSignal<MemoryRecord[]>([]);
   const [contextOpen, setContextOpen] = createSignal(false);
+  const [inspectorOpen, setInspectorOpen] = createSignal(false);
   const [selectedEntities, setSelectedEntities] = createSignal<Set<string>>(new Set());
   const [running, setRunning] = createSignal(false);
   const [compacting, setCompacting] = createSignal(false);
@@ -912,18 +913,15 @@ export function App() {
   return (
     <div class="lcn-app">
       <header class="lcn-titlebar">
-        <div class="lcn-titlebar-logo" title="Home Assistant">
-          <button class="lcn-icon-btn" type="button" aria-label="Open Home Assistant context" onClick={() => setContextOpen(true)}>
-            <HousePlug size={15} />
-          </button>
-        </div>
+        <button class="lcn-icon-btn lcn-titlebar-home" type="button" aria-label="Home Assistant" onClick={() => setContextOpen(true)} title="Home Assistant">
+          <HousePlug size={15} />
+        </button>
         <div class="lcn-titlebar-tabs" role="tablist" aria-label="Sessions">
           <For each={tabs()}>
             {(tab) => (
               <div class="lcn-tab" data-active={tab.id === activeTab()?.id ? "true" : "false"} role="tab" aria-selected={tab.id === activeTab()?.id}>
                 <button class="lcn-tab-main" type="button" onClick={() => setActiveTabId(tab.id)}>
-                  <Workflow size={14} />
-                  <span style={{ "margin-left": "6px" }}>{tab.title}</span>
+                  <span>{tab.title}</span>
                 </button>
                 <button class="lcn-tab-close" type="button" aria-label={`Close ${tab.title}`} onClick={() => closeTab(tab.id)}>
                   <X size={13} />
@@ -931,11 +929,9 @@ export function App() {
               </div>
             )}
           </For>
-          <div class="lcn-icon-btn" style={{ "flex-shrink": "0" }}>
-            <button class="lcn-icon-btn" type="button" aria-label="New session" onClick={createTab}>
-              <Plus size={15} />
-            </button>
-          </div>
+          <button class="lcn-icon-btn lcn-titlebar-add" type="button" aria-label="New session" onClick={createTab}>
+            <Plus size={16} />
+          </button>
         </div>
         <div class="lcn-titlebar-actions">
           <span style={{ display: "flex", "align-items": "center", gap: "6px", color: "var(--v2-text-text-faint)", "font-size": "11px" }}>
@@ -948,13 +944,16 @@ export function App() {
           <button class="lcn-icon-btn" type="button" aria-label="Memory" onClick={() => { void reloadMemories(); setMemoryOpen(true); }}>
             <Brain size={15} />
           </button>
+          <button class="lcn-icon-btn" type="button" aria-label="Evidence" onClick={() => setInspectorOpen(true)}>
+            <SlidersHorizontal size={15} />
+          </button>
           <button class="lcn-icon-btn" type="button" aria-label="Providers" onClick={() => setProviderOpen(true)}>
             <Settings2 size={15} />
           </button>
         </div>
       </header>
 
-      <div class="lcn-main-grid">
+      <div class="lcn-shell">
         <main class="lcn-workbench">
           <Show
             when={transcript().length === 0}
@@ -1188,18 +1187,76 @@ export function App() {
               </div>
             }
           >
-            <div class="lcn-conversation">
-              <div class="lcn-welcome">
+            <div class="lcn-new-session">
+              <div class="lcn-new-session-inner">
                 <div class="lcn-wordmark">
                   strat<span class="lcn-wordmark-accent">um</span>
                 </div>
                 <div class="lcn-studio-tag">By Synork</div>
+                <div class="lcn-composer-wrap lcn-composer-wrap--new">
+                  <form
+                    class="lcn-composer"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void submitPrompt();
+                    }}
+                  >
+                    <textarea
+                      value={prompt()}
+                      onInput={(event) => setPrompt(event.currentTarget.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          void submitPrompt();
+                        }
+                      }}
+                      placeholder={mode() === "build" ? "What should Stratum build as a local draft?" : "What should Stratum investigate or plan?"}
+                    />
+                    <div class="lcn-composer-actions">
+                      <div class="lcn-composer-controls">
+                        <Show
+                          when={favoriteProviders().length > 0}
+                          fallback={
+                            <button class="lcn-tool-btn" type="button" onClick={() => setProviderOpen(true)}>
+                              <Star size={13} />
+                              Choose model
+                            </button>
+                          }
+                        >
+                          <select
+                            class="lcn-select"
+                            value={activeProviderId()}
+                            onChange={(event) => handleProviderChange(event.currentTarget.value)}
+                            aria-label="Provider"
+                          >
+                            <For each={favoriteProviders()}>
+                              {(provider) => <option value={provider.id}>{provider.label}</option>}
+                            </For>
+                          </select>
+                          <select
+                            class="lcn-select"
+                            value={activeModelId()}
+                            onChange={(event) => setActiveModelId(event.currentTarget.value)}
+                            aria-label="Favorite model"
+                          >
+                            <For each={activeFavoriteModels()}>
+                              {(model) => <option value={model.id}>{model.label}</option>}
+                            </For>
+                          </select>
+                        </Show>
+                      </div>
+                      <button class="lcn-send" type="submit" disabled={!prompt().trim()} aria-label="Send">
+                        <ArrowUp size={18} />
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           </Show>
         </main>
 
-        <aside class="lcn-rail">
+        <aside class="lcn-sidepanel" data-open={inspectorOpen() ? "true" : "false"} role="complementary" aria-label="Evidence">
           <div class="lcn-rail-head">
             <div>
               <div class="lcn-eyebrow">EVIDENCE</div>
@@ -1386,6 +1443,11 @@ export function App() {
           </div>
         </aside>
       </div>
+
+      {/* Evidence scrim */}
+      <Show when={inspectorOpen()}>
+        <div class="lcn-scrim" onClick={() => setInspectorOpen(false)} aria-hidden="true" />
+      </Show>
 
       {/* Context panel */}
       <div
