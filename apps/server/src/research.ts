@@ -144,11 +144,77 @@ export class ResearchTools {
   }
 
   private async duckDuckGoSearch(query: string, providerNote?: string): Promise<unknown> {
-    const result = await fetchPublic(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+    try {
+      const results = await this.duckDuckGoInstantAnswer(query);
+      if (results.length > 0) {
+        return { engine: "duckduckgo-keyless-instant", provider_note: providerNote ?? "keyless fallback, no API key required", count: results.length, results };
+      }
+    } catch (error) {
+      return {
+        engine: "duckduckgo-keyless",
+        provider_note: providerNote ?? "keyless fallback, no API key required",
+        degraded: true,
+        error: error instanceof Error ? error.message : String(error),
+        count: 0,
+        results: [],
+      };
+    }
+    try {
+      const results = await this.duckDuckGoHtml(query);
+      if (results.length === 0) {
+        return {
+          engine: "duckduckgo-keyless",
+          provider_note: providerNote ?? "keyless fallback, no API key required",
+          degraded: true,
+          error: "Keyless DuckDuckGo fallback returned no results for a general query. Search may be unavailable or the engine changed its API. Treat zero results as inconclusive, not as proof nothing exists.",
+          count: 0,
+          results,
+        };
+      }
+      return { engine: "duckduckgo-keyless", provider_note: providerNote ?? "keyless fallback, no API key required", count: results.length, results };
+    } catch (error) {
+      return {
+        engine: "duckduckgo-keyless",
+        provider_note: providerNote ?? "keyless fallback, no API key required",
+        degraded: true,
+        error: error instanceof Error ? error.message : String(error),
+        count: 0,
+        results: [],
+      };
+    }
+  }
+
+  private async duckDuckGoInstantAnswer(query: string): Promise<Array<{ title: string; url: string; snippet: string }>> {
+    const result = await fetchPublic(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`, {
       headers: { "user-agent": "Stratum/0.2 (+Home Assistant); duckduckgo keyless fetch" },
+    });
+    if (result.status < 200 || result.status >= 300) throw new Error(`DuckDuckGo API returned ${result.status}`);
+    const data = JSON.parse(decoded(result.body)) as {
+      AbstractText?: string;
+      AbstractURL?: string;
+      Heading?: string;
+      RelatedTopics?: Array<{ Text?: string; FirstURL?: string; Topics?: unknown[] }>;
+    };
+    const results: Array<{ title: string; url: string; snippet: string }> = [];
+    if (data.AbstractText && data.AbstractURL) {
+      results.push({ title: data.Heading ?? query, url: data.AbstractURL, snippet: data.AbstractText });
+    }
+    for (const topic of data.RelatedTopics ?? []) {
+      if (topic.Text) results.push({ title: topic.Text.split(" - ")[0]?.slice(0, 80) ?? topic.Text, url: topic.FirstURL ?? "", snippet: topic.Text });
+    }
+    return results.slice(0, 8);
+  }
+
+  private async duckDuckGoHtml(query: string): Promise<Array<{ title: string; url: string; snippet: string }>> {
+    const result = await fetchPublic(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+      headers: {
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        accept: "text/html",
+      },
     });
     if (result.status < 200 || result.status >= 300) throw new Error(`DuckDuckGo search returned ${result.status}`);
     const html = decoded(result.body);
+    if (html.length < 400 || /anomaly|unusual traffic|captcha/i.test(html)) throw new Error("DuckDuckGo served a challenge page instead of results (bot detection)");
     const results: Array<{ title: string; url: string; snippet: string }> = [];
     const matches = [...html.matchAll(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)];
     const snippets = [...html.matchAll(/<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g)];
@@ -161,12 +227,7 @@ export class ResearchTools {
         snippet: cleanText(stripHtml(snippets[index]?.[1] ?? "")),
       });
     });
-    return {
-      engine: "duckduckgo-keyless",
-      provider_note: providerNote ?? "keyless fallback, no API key required",
-      count: results.length,
-      results,
-    };
+    return results;
   }
 
   async githubSearch(query: string): Promise<unknown> {
@@ -189,8 +250,28 @@ export class ResearchTools {
   private async githubJson(url: string): Promise<unknown> {
     const headers: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "Stratum/0.2 (+Home Assistant)", "x-github-api-version": "2022-11-28" };
     if (this.githubToken) headers.authorization = `Bearer ${this.githubToken}`;
-    const result = await fetchPublic(url, { headers });
-    if (result.status < 200 || result.status >= 300) throw new Error(`GitHub returned ${result.status}: ${decoded(result.body).slice(0, 300)}`);
-    return JSON.parse(decoded(result.body)) as unknown;
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      try {
+        const result = await fetchPublic(url, { headers });
+        if (result.status === 429 || (result.status >= 500 && result.status < 600)) {
+          lastError = new Error(`GitHub returned ${result.status}`);
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+          continue;
+        }
+        if (result.status === 403 && decoded(result.body).includes("rate limit")) {
+          throw new Error("GitHub API rate limit exceeded. Create a finalize token via Settings > Models and set the github_token app option for a higher limit.");
+        }
+        if (result.status === 404) throw new Error("Repository, file, or path not found on GitHub");
+        if (result.status < 200 || result.status >= 300) throw new Error(`GitHub returned ${result.status}: ${decoded(result.body).slice(0, 300)}`);
+        return JSON.parse(decoded(result.body)) as unknown;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (/not found|rate limit|Invalid/i.test(lastError.message)) throw lastError;
+        if (attempt === 2) throw new Error(`GitHub request failed after retries: ${lastError.message}`);
+      }
+    }
+    throw lastError ?? new Error("GitHub request failed");
   }
 }

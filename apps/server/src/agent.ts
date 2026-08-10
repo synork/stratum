@@ -38,9 +38,11 @@ export function runAgent(
       execute: async ({ query, limit }) => homeAssistant.search(query, limit),
     }),
     list_entities: tool({
-      description: "List Home Assistant entities, optionally filtered by domain. Use only when broad inventory is necessary.",
-      inputSchema: z.object({ domain: z.string().optional(), limit: z.number().int().min(1).max(500).default(200) }),
-      execute: async ({ domain, limit }) => homeAssistant.list().filter((entity) => !domain || entity.domain === domain).slice(0, limit),
+      description: "List Home Assistant entities, optionally filtered by domain. Disabled entities are excluded by default; pass includeDisabled to include them.",
+      inputSchema: z.object({ domain: z.string().optional(), limit: z.number().int().min(1).max(500).default(200), includeDisabled: z.boolean().default(false) }),
+      execute: async ({ domain, limit, includeDisabled }) => homeAssistant.list()
+        .filter((entity) => (!domain || entity.domain === domain) && (includeDisabled || !entity.disabled))
+        .slice(0, limit),
     }),
     list_areas: tool({
       description: "List configured Home Assistant areas.",
@@ -57,14 +59,14 @@ export function runAgent(
       }).slice(0, limit),
     }),
     list_automations: tool({
-      description: "List existing Home Assistant automations with configuration IDs and last-triggered timestamps.",
+      description: "List existing Home Assistant automations with their id (also matches inspect_automation), entity ID, and last-triggered timestamp.",
       inputSchema: z.object({ query: z.string().optional() }),
       execute: async ({ query }) => homeAssistant.automationList().filter((automation) => !query || `${automation.name} ${automation.entityId}`.toLowerCase().includes(query.toLowerCase())),
     }),
     inspect_automation: tool({
-      description: "Read the exact configuration of an existing Home Assistant automation by configuration ID.",
-      inputSchema: z.object({ configId: z.string() }),
-      execute: async ({ configId }) => await homeAssistant.getAutomation(configId) ?? { error: "Automation not found" },
+      description: "Read the exact configuration of an existing Home Assistant automation. Accepts the id, entity ID (automation.*), or automation name shown by list_automations.",
+      inputSchema: z.object({ id: z.string() }),
+      execute: async ({ id }) => await homeAssistant.getAutomation(id) ?? { error: `Automation not found for "${id}". Use list_automations first and pass the id or entityId it returns.` },
     }),
     list_dashboards: tool({
       description: "List registered Home Assistant dashboards.",

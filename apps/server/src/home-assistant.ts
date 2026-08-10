@@ -53,10 +53,14 @@ export class HomeAssistantClient {
   areaList(): RegistryArea[] { return this.areas; }
   deviceList(): RegistryDevice[] { return this.devices; }
 
+  appSlugify(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+  }
+
   automationList() {
     return this.entities.filter((entity) => entity.domain === "automation").map((entity) => ({
       entityId: entity.entityId,
-      configId: typeof entity.attributes.id === "string" ? entity.attributes.id : entity.entityId.slice("automation.".length),
+      id: typeof entity.attributes.id === "string" ? entity.attributes.id : entity.entityId.slice("automation.".length),
       name: entity.friendlyName,
       state: entity.state,
       lastTriggered: entity.attributes.last_triggered ?? null,
@@ -73,7 +77,13 @@ export class HomeAssistantClient {
     const path = `/history/period/${encodeURIComponent(start)}?filter_entity_id=${encodeURIComponent(entityId)}&minimal_response&no_attributes`;
     const response = await this.request(path);
     if (!response.ok) throw new Error(`History returned ${response.status}`);
-    return response.json();
+    const raw = (await response.json()) as Array<Array<Record<string, unknown>>>;
+    const states = raw[0] ?? [];
+    return states.map((entry) => ({
+      state: entry.state,
+      lastChanged: entry.last_changed,
+      lastUpdated: entry.last_updated ?? null,
+    }));
   }
 
   async logbook(entityId: string, hours: number): Promise<unknown> {
@@ -85,9 +95,12 @@ export class HomeAssistantClient {
     return response.json();
   }
 
-  async helperList(domain?: HelperDomain): Promise<Array<{ domain: HelperDomain; helpers: unknown[] }>> {
+  async helperList(domain?: HelperDomain): Promise<Record<HelperDomain, unknown[]>> {
     const domains = domain ? [domain] : helperDomains;
-    return Promise.all(domains.map(async (item) => ({ domain: item, helpers: await this.wsCommand<unknown[]>(`${item}/list`) })));
+    const pairs = await Promise.all(domains.map(async (item) => [item, await this.wsCommand<unknown[]>(`${item}/list`)] as const));
+    const result = Object.fromEntries(pairs.filter(([, helpers]) => helpers.length > 0)) as Record<HelperDomain, unknown[]>;
+    if (domain) return result;
+    return result;
   }
 
   validateHelper(domain: HelperDomain, config: Record<string, unknown>): { valid: boolean; errors: string[]; warnings: string[] } {
@@ -150,9 +163,24 @@ export class HomeAssistantClient {
 
   async getAutomation(id: string): Promise<Record<string, unknown> | null> {
     const response = await this.request(`/config/automation/config/${encodeURIComponent(id)}`);
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`Read automation returned ${response.status}`);
-    return response.json() as Promise<Record<string, unknown>>;
+    if (response.status !== 404) {
+      if (!response.ok) throw new Error(`Read automation returned ${response.status}`);
+      return response.json() as Promise<Record<string, unknown>>;
+    }
+    // Non-numeric / alias IDs aren't addressable directly. Resolve against the
+    // authoritative config list by id, entity_id, or slug so inspect_automation
+    // and list_automations always agree on what an ID is.
+    const listResponse = await this.request("/config/automation/config/list");
+    if (!listResponse.ok) throw new Error(`Read automation list returned ${listResponse.status}`);
+    const configs = (await listResponse.json()) as Array<Record<string, unknown>>;
+    const needle = id.replace(/^automation\./, "");
+    const match = configs.find((config) => {
+      const configId = typeof config.id === "string" || typeof config.id === "number" ? String(config.id) : "";
+      const entityId = typeof config.entity_id === "string" ? config.entity_id : "";
+      const alias = typeof config.alias === "string" ? config.alias : "";
+      return configId === id || configId === needle || entityId === id || entityId === `automation.${needle}` || alias === needle;
+    });
+    return match ?? null;
   }
 
   async publishAutomation(id: string, payload: Record<string, unknown>): Promise<void> {
