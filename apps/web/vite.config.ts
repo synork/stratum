@@ -1,10 +1,9 @@
-import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import solid from "vite-plugin-solid";
 
 export default defineConfig({
   base: "./",
-  plugins: [tailwindcss(), solid()],
+  plugins: [react()],
   server: {
     port: 5173,
     proxy: {
