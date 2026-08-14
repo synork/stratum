@@ -77,7 +77,7 @@ export type Health = z.infer<typeof healthSchema>;
 
 export const proposalSchema = z.object({
   id: z.string(),
-  type: z.enum(["automation", "dashboard", "helper"]),
+  type: z.enum(["automation", "dashboard", "helper", "integration"]),
   resourceId: z.string(),
   title: z.string(),
   explanation: z.string(),

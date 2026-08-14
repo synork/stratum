@@ -30,6 +30,7 @@ const server = await createApp(
         dashboardReviewer,
         research,
         webDist,
+        haConfigDir: config.haConfigDir,
         logLevel: process.env.LOG_LEVEL ?? "info",
       }
     : {
@@ -37,6 +38,7 @@ const server = await createApp(
         homeAssistant,
         dashboardReviewer,
         research,
+        haConfigDir: config.haConfigDir,
         logLevel: process.env.LOG_LEVEL ?? "info",
       },
 );

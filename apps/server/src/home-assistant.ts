@@ -238,6 +238,10 @@ export class HomeAssistantClient {
     if (preview) await this.wsCommand("lovelace/dashboards/delete", { dashboard_id: preview.id });
   }
 
+  async reloadCoreConfig(): Promise<void> {
+    await this.wsCommand("homeassistant/reload_core_config");
+  }
+
   async refresh(): Promise<void> {
     if (!this.configured) return;
     try {

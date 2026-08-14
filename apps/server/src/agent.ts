@@ -5,6 +5,7 @@ import type { Database, StoredProvider } from "./database.js";
 import { helperDomains, type HelperDomain, type HomeAssistantClient } from "./home-assistant.js";
 import { createModel } from "./providers.js";
 import type { ResearchTools } from "./research.js";
+import { validateIntegration } from "./integration.js";
 
 const SYSTEM_PROMPT = `You are Stratum, a Home Assistant automation and dashboard workbench made by Synork.
 Use tools to inspect the actual installation before proposing entity IDs or behavior.
@@ -177,6 +178,30 @@ export function runAgent(
         };
         database.saveProposal(proposal);
         return { proposalId: proposal.id, validation: proposal.validation, status: "waiting_for_approval" };
+      },
+    }),
+    draft_integration: tool({
+      description: "Create a local custom Home Assistant integration (custom_components package) proposal for a specific problem the user describes. Generates manifest.json, __init__.py, and optionally config_flow.py plus one platform file. This does NOT write to Home Assistant until the user approves it.",
+      inputSchema: z.object({
+        domain: z.string().regex(/^[a-z][a-z0-9_]{1,31}$/, "domain must be 2-32 lowercase letters, digits, or underscores starting with a letter").describe("unique lowercase integration domain, e.g. washer_monitor"),
+        title: z.string().min(1),
+        explanation: z.string().min(1),
+        files: z.record(z.string(), z.string()).describe("map of file paths within custom_components/<domain>/ to file contents, including manifest.json, __init__.py, and a platform file like sensor.py"),
+      }),
+      execute: async ({ domain, title, explanation, files }) => {
+        const validation = validateIntegration({ domain, files });
+        const proposal = {
+          id: randomUUID(), type: "integration" as const, resourceId: domain, title, explanation,
+          payload: { domain, files }, status: "draft" as const,
+          validation, createdAt: new Date().toISOString(),
+        };
+        database.saveProposal(proposal);
+        return {
+          proposalId: proposal.id,
+          validation,
+          status: "waiting_for_approval",
+          note: "Approve to install into custom_components/<domain> and reload Home Assistant. Installer is sandboxed: import allowlist, no subprocess/system/eval, file size caps.",
+        };
       },
     }),
   };

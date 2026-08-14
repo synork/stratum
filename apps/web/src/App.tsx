@@ -117,6 +117,26 @@ function DiffView({ oldConfig, newConfig }: { oldConfig: Record<string, unknown>
   );
 }
 
+function IntegrationFiles({ payload }: { payload: Record<string, unknown> }) {
+  const domain = typeof payload.domain === "string" ? payload.domain : "";
+  const files = payload.files && typeof payload.files === "object" ? payload.files as Record<string, string> : {};
+  const entries = Object.entries(files);
+  return (
+    <div className="integration-files">
+      <div className="integration-files-path">custom_components/{domain}/</div>
+      {entries.map(([path, content]) => (
+        <details className="integration-file" key={path}>
+          <summary>
+            <span className="integration-file-name">{path}</span>
+            <span className="integration-file-size">{(content?.length ?? 0).toLocaleString()} B</span>
+          </summary>
+          <pre className="integration-file-code">{content}</pre>
+        </details>
+      ))}
+    </div>
+  );
+}
+
 type Mode = "plan" | "build";
 
 interface TranscriptItem {
@@ -969,7 +989,7 @@ export function App() {
                   <details className="draft-card-config" onToggle={async (event) => {
                     if (event.currentTarget.open) {
                       setReviewedProposals((current) => new Set(current).add(proposal.id));
-                      if (!(proposal.id in currentConfigs)) {
+                      if (!(proposal.id in currentConfigs) && proposal.type !== "integration") {
                         try { const current = await api.getResourceCurrent(proposal.type, proposal.resourceId); setCurrentConfigs((prev) => ({ ...prev, [proposal.id]: current })); }
                         catch { setCurrentConfigs((prev) => ({ ...prev, [proposal.id]: null })); }
                       }
@@ -977,8 +997,14 @@ export function App() {
                   }}>
                     <summary>{reviewed && proposal.validation.valid ? <Check size={12} /> : <Search size={12} />} Review exact {proposal.type} configuration{reviewed ? " · reviewed" : ""}</summary>
                     <div className="proposal-config-content">
-                      <pre>{JSON.stringify(proposal.payload, null, 2)}</pre>
-                      <DiffView oldConfig={currentConfigs[proposal.id] ?? null} newConfig={proposal.payload} />
+                      {proposal.type === "integration" ? (
+                        <IntegrationFiles payload={proposal.payload} />
+                      ) : (
+                        <>
+                          <pre>{JSON.stringify(proposal.payload, null, 2)}</pre>
+                          <DiffView oldConfig={currentConfigs[proposal.id] ?? null} newConfig={proposal.payload} />
+                        </>
+                      )}
                     </div>
                   </details>
                   <div className="draft-card-actions">
@@ -995,10 +1021,16 @@ export function App() {
                       catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
                       finally { setReviewingDashboard(false); }
                     }}><Eye size={13} /> Preview</button>}
-                    <button type="button" className="draft-card-approve" disabled={!proposal.validation.valid || !reviewed} title={!reviewed ? "Open Review exact configuration below to confirm it" : "Publish this draft to Home Assistant"} onClick={async () => {
-                      try { await api.approveProposal(proposal.id); const next = await api.proposals(); setProposals(next); showToast(`Published "${proposal.title}" to Home Assistant`, "success"); }
+                    <button type="button" className="draft-card-approve" disabled={!proposal.validation.valid || !reviewed} title={!reviewed ? "Open Review exact configuration below to confirm it" : proposal.type === "integration" ? "Install this integration into Home Assistant" : "Publish this draft to Home Assistant"} onClick={async () => {
+                      try {
+                        const result = await api.approveProposal(proposal.id);
+                        const next = await api.proposals();
+                        setProposals(next);
+                        if (result.type === "integration") showToast(`Installed integration "${result.resourceId}"`, "success");
+                        else showToast(`Published "${proposal.title}" to Home Assistant`, "success");
+                      }
                       catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-                    }}>Approve &amp; deploy</button>
+                    }}>{proposal.type === "integration" ? "Install integration" : "Approve &amp; deploy"}</button>
                   </div>
                 </div>
               );
@@ -1055,7 +1087,7 @@ export function App() {
             <details className="proposal-config" onToggle={async (event) => {
               if (event.currentTarget.open) {
                 setReviewedProposals((current) => new Set(current).add(proposal.id));
-                if (!(proposal.id in currentConfigs)) {
+                if (!(proposal.id in currentConfigs) && proposal.type !== "integration") {
                   try {
                     const current = await api.getResourceCurrent(proposal.type, proposal.resourceId);
                     setCurrentConfigs((prev) => ({ ...prev, [proposal.id]: current }));
@@ -1071,14 +1103,20 @@ export function App() {
                 <button type="button" className="config-tab">Diff</button>
               </div>
               <div className="proposal-config-content">
-                <pre>{JSON.stringify(proposal.payload, null, 2)}</pre>
-                <DiffView oldConfig={currentConfigs[proposal.id] ?? null} newConfig={proposal.payload} />
+                {proposal.type === "integration" ? (
+                  <IntegrationFiles payload={proposal.payload} />
+                ) : (
+                  <>
+                    <pre>{JSON.stringify(proposal.payload, null, 2)}</pre>
+                    <DiffView oldConfig={currentConfigs[proposal.id] ?? null} newConfig={proposal.payload} />
+                  </>
+                )}
               </div>
             </details>
             {proposal.status === "draft" && <div className="proposal-actions">
               <button type="button" onClick={async () => { try { await api.rejectProposal(proposal.id); setProposals(await api.proposals()); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } }}>Reject</button>
               {proposal.type === "dashboard" && <button type="button" disabled={!proposal.validation.valid || reviewingDashboard} onClick={async () => { if (!selectedProvider || !selectedModel) { setProviderOpen(true); return; } const model = activeProvider?.models.find((item) => item.id === selectedModel); if (!model?.capabilities.includes("vision")) { setError("Select a vision-capable model for dashboard preview."); return; } setReviewingDashboard(true); setDashboardReview(null); try { setDashboardReview(await api.previewProposal(proposal.id, { providerId: selectedProvider, modelId: selectedModel })); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setReviewingDashboard(false); } }}><Eye size={13} /> Stage visual preview</button>}
-              <button type="button" className="proposal-approve" disabled={!proposal.validation.valid || !reviewedProposals.has(proposal.id)} onClick={async () => { try { await api.approveProposal(proposal.id); setProposals(await api.proposals()); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } }}>Publish reviewed change</button>
+              <button type="button" className="proposal-approve" disabled={!proposal.validation.valid || !reviewedProposals.has(proposal.id)} onClick={async () => { try { const result = await api.approveProposal(proposal.id); setProposals(await api.proposals()); if (result.type === "integration") showToast(`Installed integration "${result.resourceId}"`, "success"); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } }}>{proposal.type === "integration" ? "Install integration" : "Publish reviewed change"}</button>
             </div>}
             {(proposal.status === "rejected" || proposal.status === "failed") && <div className="proposal-actions"><button type="button" onClick={async () => { try { await api.deleteProposal(proposal.id); setProposals(await api.proposals()); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } }}>Remove record</button></div>}
           </article>

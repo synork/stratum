@@ -8,6 +8,7 @@ export const config = {
   haWsUrl: process.env.HA_WS_URL ?? "",
   haToken: process.env.HA_TOKEN ?? "",
   haFrontendUrl: process.env.HA_FRONTEND_URL ?? "http://127.0.0.1:8123",
+  haConfigDir: process.env.HA_CONFIG_DIR ?? "/homeassistant",
   chromiumPath: process.env.CHROMIUM_PATH ?? "",
   githubToken: process.env.GITHUB_TOKEN ?? "",
   webDist: process.env.WEB_DIST ?? path.resolve("apps/web/dist"),

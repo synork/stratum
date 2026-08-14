@@ -9,6 +9,7 @@ import { z } from "zod";
 import { runAgent } from "./agent.js";
 import { DashboardReviewer } from "./dashboard-review.js";
 import { helperDomains, type HelperDomain, type HomeAssistantClient } from "./home-assistant.js";
+import { IntegrationInstaller, validateIntegration } from "./integration.js";
 import { createModel, discoverModels, providerDefinitions, toSummary } from "./providers.js";
 import { ResearchTools } from "./research.js";
 import type { Database } from "./database.js";
@@ -20,10 +21,12 @@ export interface AppDeps {
   research: ResearchTools;
   webDist?: string;
   logLevel?: string;
+  haConfigDir?: string;
 }
 
 export async function createApp(deps: AppDeps): Promise<FastifyInstance> {
-  const { database, homeAssistant, dashboardReviewer, research, webDist, logLevel } = deps;
+  const { database, homeAssistant, dashboardReviewer, research, webDist, logLevel, haConfigDir = "/homeassistant" } = deps;
+  const integrator = new IntegrationInstaller(haConfigDir);
   const app = Fastify({ logger: { level: logLevel ?? "info" } });
   await app.register(cors, { origin: false });
 
@@ -320,6 +323,29 @@ export async function createApp(deps: AppDeps): Promise<FastifyInstance> {
 
   app.get("/api/proposals", async () => database.listProposals());
 
+  app.get("/api/integrations", async () => {
+    const domains = await integrator.listInstalled();
+    return Promise.all(
+      domains.map(async (domain) => ({
+        domain,
+        installed: await integrator.exists(domain),
+      })),
+    );
+  });
+
+  app.delete<{ Params: { id: string } }>("/api/integrations/:domain", async (request, reply) => {
+    const domain = String(request.params.id).toLowerCase();
+    if (!/^[a-z][a-z0-9_]{1,31}$/.test(domain)) return reply.code(400).send({ error: "Invalid integration domain" });
+    if (!(await integrator.exists(domain))) return reply.code(404).send({ error: "Integration not installed" });
+    await integrator.remove(domain);
+    try {
+      await homeAssistant.reloadCoreConfig();
+    } catch (error) {
+      app.log.warn({ error, domain }, "Core config reload after integration removal failed");
+    }
+    return reply.code(204).send();
+  });
+
   app.get<{ Params: { type: string; resourceId: string } }>(
     "/api/resources/:type/:resourceId/current",
     async (request, reply) => {
@@ -459,6 +485,7 @@ export async function createApp(deps: AppDeps): Promise<FastifyInstance> {
     if (proposal.status !== "draft") return reply.code(409).send({ error: `Proposal is already ${proposal.status}` });
     if (proposal.type === "automation") proposal.validation = homeAssistant.validateAutomation(proposal.payload);
     else if (proposal.type === "dashboard") proposal.validation = homeAssistant.validateDashboard(proposal.payload);
+    else if (proposal.type === "integration") proposal.validation = validateIntegration(proposal.payload);
     else {
       const domain = proposal.payload.domain;
       const helperConfig = proposal.payload.config;
@@ -476,6 +503,7 @@ export async function createApp(deps: AppDeps): Promise<FastifyInstance> {
     }
     if (!proposal.validation.valid) {
       database.saveProposal(proposal);
+
       return reply.code(422).send({ error: proposal.validation.errors.join("; ") });
     }
     proposal.status = "approved";
@@ -486,11 +514,16 @@ export async function createApp(deps: AppDeps): Promise<FastifyInstance> {
           ? await homeAssistant.getAutomation(proposal.resourceId)
           : proposal.type === "dashboard"
             ? await homeAssistant.getDashboard(proposal.resourceId)
-            : null;
+            : proposal.type === "integration"
+              ? await integrator.snapshot(proposal.resourceId)
+              : null;
       if (proposal.type === "automation") await homeAssistant.publishAutomation(proposal.resourceId, proposal.payload);
       else if (proposal.type === "dashboard")
         await homeAssistant.publishDashboard(proposal.resourceId, proposal.payload);
-      else {
+      else if (proposal.type === "integration") {
+        const payload = proposal.payload as { domain: string; files: Record<string, string> };
+        await integrator.write(payload.domain, payload.files);
+      } else {
         const domain = proposal.payload.domain as HelperDomain;
         const helperConfig = proposal.payload.config as Record<string, unknown>;
         const created = await homeAssistant.createHelper(domain, helperConfig);
@@ -501,8 +534,26 @@ export async function createApp(deps: AppDeps): Promise<FastifyInstance> {
       proposal.status = "published";
       database.saveProposal(proposal);
       await homeAssistant.refresh();
+      if (proposal.type === "integration") {
+        // Let HA pick up the new custom component. A fresh component needs a
+        // core reload at minimum; best-effort, non-fatal if it can't be done now.
+        try {
+          await homeAssistant.reloadCoreConfig();
+        } catch (error) {
+          app.log.warn({ error, domain: proposal.resourceId }, "Core config reload after integration install failed");
+        }
+      }
       return proposal;
     } catch (error) {
+      // Roll back integration installs on failure
+      if (proposal.type === "integration") {
+        try {
+          const domain = (proposal.payload as { domain: string }).domain;
+          await integrator.rollback(domain, null);
+        } catch (rollbackError) {
+          app.log.error({ err: rollbackError }, "Integration rollback failed");
+        }
+      }
       proposal.status = "failed";
       database.saveProposal(proposal);
       throw error;

@@ -196,6 +196,16 @@ select:hover { background: var(--hover); color: var(--text); }
 .diff-line--removed { background: rgb(255 147 138 / 10%); color: #ff938a; }
 .diff-line--unchanged { color: var(--muted); }
 .diff-marker { flex: 0 0 16px; font-weight: 530; }
+
+.integration-files { padding: 8px; }
+.integration-files-path { padding: 6px 8px 8px; color: var(--faint); font: 10px ui-monospace, monospace; }
+.integration-file { border: .5px solid var(--border); border-radius: 6px; background: var(--deep); margin-bottom: 6px; overflow: hidden; }
+.integration-file summary { padding: 6px 9px; display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none; }
+.integration-file summary::-webkit-details-marker { display: none; }
+.integration-file-name { color: var(--text); font: 11px ui-monospace, monospace; }
+.integration-file-size { color: var(--faint); font: 9px ui-monospace, monospace; }
+.integration-file[open] summary { border-bottom: .5px solid var(--border); }
+.integration-file-code { max-height: 260px; margin: 0; padding: 10px; overflow: auto; color: var(--muted); font: 11px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
 .diff-content { flex: 1; }
 
 .toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 100; pointer-events: none; }

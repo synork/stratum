@@ -96,4 +96,6 @@ export const api = {
   memories: (query = "") => request<MemoryRecord[]>(`memories?q=${encodeURIComponent(query)}`),
   saveMemory: (content: string, tags: string[]) => request<MemoryRecord>("memories", { method: "POST", body: JSON.stringify({ content, tags }) }),
   deleteMemory: (id: string) => request<void>(`memories/${id}`, { method: "DELETE" }),
+  integrations: () => request<Array<{ domain: string; installed: boolean }>>("integrations"),
+  deleteIntegration: (domain: string) => request<void>(`integrations/${encodeURIComponent(domain)}`, { method: "DELETE" }),
 };
