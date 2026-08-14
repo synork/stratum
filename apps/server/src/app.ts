@@ -333,6 +333,29 @@ export async function createApp(deps: AppDeps): Promise<FastifyInstance> {
     );
   });
 
+  app.get("/api/integrations/debug", async () => {
+    const dir = `${haConfigDir}/custom_components`;
+    let exists = false;
+    let entries: string[] = [];
+    let error: string | null = null;
+    let mounts: string | null = null;
+    try {
+      const { readFile } = await import("node:fs/promises");
+      mounts = (await readFile("/proc/mounts", "utf8")).split("\n").filter((l) => l.includes("homeassistant") || l.includes("/home") || l.includes("/config")).join("\\n");
+    } catch (e) {
+      mounts = `mounts error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    try {
+      const { access, readdir } = await import("node:fs/promises");
+      await access(dir);
+      exists = true;
+      entries = await readdir(dir);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+    return { haConfigDir, dir, exists, count: entries.length, entries, error, mounts };
+  });
+
   app.delete<{ Params: { id: string } }>("/api/integrations/:domain", async (request, reply) => {
     const domain = String(request.params.id).toLowerCase();
     if (!/^[a-z][a-z0-9_]{1,31}$/.test(domain)) return reply.code(400).send({ error: "Invalid integration domain" });

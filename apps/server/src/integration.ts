@@ -208,18 +208,24 @@ export class IntegrationInstaller {
   }
 
   async listInstalled(): Promise<string[]> {
+    const base = resolve(this.haConfigDir, "custom_components");
+    let entries: string[];
     try {
-      const base = resolve(this.haConfigDir, "custom_components");
-      const entries = await readdir(base);
-      const domains: string[] = [];
-      for (const entry of entries) {
-        const info = await stat(join(base, entry));
-        if (info.isDirectory() && (await this.exists(entry))) domains.push(entry);
-      }
-      return domains.sort();
+      entries = await readdir(base);
     } catch {
+      // path not present or not mounted
       return [];
     }
+    const domains: string[] = [];
+    for (const entry of entries) {
+      try {
+        const info = await stat(join(base, entry));
+        if (info.isDirectory() && (await this.exists(entry))) domains.push(entry);
+      } catch {
+        // skip unreadable entries
+      }
+    }
+    return domains.sort();
   }
 
   summarize(payload: IntegrationPayload): { domain: string; fileCount: number; totalBytes: number; manifest: Record<string, unknown> | null } {

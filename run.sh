@@ -1,7 +1,6 @@
 #!/usr/bin/with-contenv bashio
 export PORT=8099
 export DATA_DIR=/config
-export HA_CONFIG_DIR=/homeassistant
 export HA_BASE_URL=http://supervisor/core/api
 export HA_WS_URL=ws://supervisor/core/websocket
 export HA_TOKEN="${SUPERVISOR_TOKEN}"
