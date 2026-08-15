@@ -167,20 +167,26 @@ export class HomeAssistantClient {
       if (!response.ok) throw new Error(`Read automation returned ${response.status}`);
       return response.json() as Promise<Record<string, unknown>>;
     }
-    // Non-numeric / alias IDs aren't addressable directly. Resolve against the
-    // authoritative config list by id, entity_id, or slug so inspect_automation
-    // and list_automations always agree on what an ID is.
-    const listResponse = await this.request("/config/automation/config/list");
-    if (!listResponse.ok) throw new Error(`Read automation list returned ${listResponse.status}`);
-    const configs = (await listResponse.json()) as Array<Record<string, unknown>>;
-    const needle = id.replace(/^automation\./, "");
-    const match = configs.find((config) => {
-      const configId = typeof config.id === "string" || typeof config.id === "number" ? String(config.id) : "";
-      const entityId = typeof config.entity_id === "string" ? config.entity_id : "";
-      const alias = typeof config.alias === "string" ? config.alias : "";
-      return configId === id || configId === needle || entityId === id || entityId === `automation.${needle}` || alias === needle;
-    });
-    return match ?? null;
+    // Direct lookup by id was a 404. Try to resolve non-numeric / alias IDs
+    // against the automation config list (used by list_automations) so
+    // inspect_automation and list_automations agree on IDs. If the list
+    // endpoint is unavailable on this HA version, treat the automation as
+    // "not found" rather than failing the whole operation.
+    try {
+      const listResponse = await this.request("/config/automation/config/list");
+      if (!listResponse.ok) return null;
+      const configs = (await listResponse.json()) as Array<Record<string, unknown>>;
+      const needle = id.replace(/^automation\./, "");
+      const match = configs.find((config) => {
+        const configId = typeof config.id === "string" || typeof config.id === "number" ? String(config.id) : "";
+        const entityId = typeof config.entity_id === "string" ? config.entity_id : "";
+        const alias = typeof config.alias === "string" ? config.alias : "";
+        return configId === id || configId === needle || entityId === id || entityId === `automation.${needle}` || alias === needle;
+      });
+      return match ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async publishAutomation(id: string, payload: Record<string, unknown>): Promise<void> {
