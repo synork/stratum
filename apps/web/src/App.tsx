@@ -2,6 +2,7 @@ import React, { startTransition, useDeferredValue, useEffect, useRef, useState, 
 import {
   Activity,
   Archive,
+  ArrowDown,
   ArrowUp,
   Brain,
   Bot,
@@ -591,6 +592,14 @@ export function App() {
   }
   const entitySearchRef = useRef<HTMLInputElement>(null);
   const requestAbortRef = useRef<AbortController | null>(null);
+  const conversationRef = useRef<HTMLDivElement | null>(null);
+  const followStreamRef = useRef(true);
+  const [followStream, setFollowStreamState] = useState(true);
+
+  function setFollowStream(value: boolean) {
+    followStreamRef.current = value;
+    setFollowStreamState(value);
+  }
   const [favoriteModels, setFavoriteModels] = useState<Set<string>>(() => readStringSet(FAVORITES_KEY));
   const [lastModels, setLastModels] = useState<LastModels>(() => readLastModels());
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? newSessionTab();
@@ -705,6 +714,30 @@ export function App() {
   useEffect(() => { localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favoriteModels])); }, [favoriteModels]);
   useEffect(() => { localStorage.setItem(LAST_MODELS_KEY, JSON.stringify(lastModels)); }, [lastModels]);
   useEffect(() => { localStorage.setItem(SESSION_TABS_KEY, JSON.stringify(tabs)); }, [tabs]);
+
+  // Follow the stream: auto-scroll to the newest message while generating,
+  // unless the user has scrolled away. Resume following when the user returns
+  // to the bottom.
+  const updateFollowState = () => {
+    const el = conversationRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setFollowStream(distanceFromBottom < 60);
+  };
+  useEffect(() => {
+    if (!followStreamRef.current) return;
+    const el = conversationRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [transcript, running]);
+  useEffect(() => {
+    const el = conversationRef.current;
+    if (!el) return;
+    const onScroll = () => updateFollowState();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    requestAnimationFrame(updateFollowState);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [activeTabId]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       Promise.all(tabs.map((tab) => api.saveThread(tab.id, tab))).then(() => api.threads()).then(setThreadHistory).catch(() => undefined);
@@ -767,6 +800,7 @@ export function App() {
     setTranscript((items) => [...items, userItem]);
     setPrompt("");
     setRunning(true);
+    setFollowStream(true);
     setError("");
     const abortController = new AbortController();
     requestAbortRef.current = abortController;
@@ -964,7 +998,7 @@ export function App() {
       </aside>
 
       <main key={activeTab.id} className={`workbench ${transcript.length === 0 ? "workbench--empty" : ""}`}>
-        <section className="conversation" aria-live="polite">
+        <section className="conversation" ref={conversationRef} aria-live="polite" data-follow={followStream ? "true" : "false"}>
           {transcript.length === 0 ? (
             <div className="welcome-state">
               <div className="wordmark" data-word="stratum"><span>stratum</span></div>
@@ -972,6 +1006,7 @@ export function App() {
             </div>
           ) : <div data-slot="session-turn-list">{transcript.map((item) => item.role === "reasoning" ? <ReasoningPart key={item.id} item={item} /> : item.role === "activity" ? <ToolActivity key={item.id} item={item} /> : item.role === "user" ? <UserMessage key={item.id} item={item} /> : <AssistantMessage key={item.id} item={item} />)}</div>}
           {error && <div className="error-banner"><CircleAlert size={17} />{error}</div>}
+          {running && !followStream && <button className="scroll-to-latest" type="button" onClick={() => { setFollowStream(true); const el = conversationRef.current; if (el) el.scrollTop = el.scrollHeight; }}><ArrowDown size={14} /> New message below</button>}
         </section>
 
         <footer className="composer-wrap">
