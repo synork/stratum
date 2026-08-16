@@ -84,6 +84,7 @@ export const api = {
   deleteProposal: (id: string) => request<void>(`proposals/${id}`, { method: "DELETE" }),
   approveProposal: (id: string) => request<Proposal>(`proposals/${id}/approve`, { method: "POST" }),
   rejectProposal: (id: string) => request<Proposal>(`proposals/${id}/reject`, { method: "POST" }),
+  retryProposal: (id: string) => request<Proposal>(`proposals/${id}/retry`, { method: "POST" }),
   reviewDashboard: (body: { providerId: string; modelId: string; dashboardPath: string }) => request<DashboardReview>("dashboard/review", { method: "POST", body: JSON.stringify(body) }),
   screenshotUrl: (filename: string) => apiUrl(`screenshots/${encodeURIComponent(filename)}`),
   previewProposal: (id: string, body: { providerId: string; modelId: string }) => request<DashboardReview & { previewPath: string }>(`proposals/${id}/preview`, { method: "POST", body: JSON.stringify(body) }),

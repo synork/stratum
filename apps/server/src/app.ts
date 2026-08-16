@@ -611,6 +611,15 @@ export async function createApp(deps: AppDeps): Promise<FastifyInstance> {
     return proposal;
   });
 
+  app.post<{ Params: { id: string } }>("/api/proposals/:id/retry", async (request, reply) => {
+    const proposal = database.getProposal(request.params.id);
+    if (!proposal) return reply.code(404).send({ error: "Proposal not found" });
+    if (proposal.status !== "failed") return reply.code(409).send({ error: `Proposal is ${proposal.status}, only failed proposals can be retried` });
+    proposal.status = "draft";
+    database.saveProposal(proposal);
+    return proposal;
+  });
+
   if (webDist) {
     try {
       const { access } = await import("node:fs/promises");
