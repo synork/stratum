@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { HomeAssistantClient } from "./home-assistant.js";
+import { HomeAssistantClient, sanitizeAutomationPayload } from "./home-assistant.js";
+
+describe("automation payload sanitization", () => {
+  it("strips metadata keys HA rejects", () => {
+    const out = sanitizeAutomationPayload({
+      alias: "Lights",
+      trigger: [{ platform: "state" }],
+      action: [],
+      type: "automation",
+      resourceId: "x",
+      _comment: "drafted",
+    });
+    expect(out).not.toHaveProperty("type");
+    expect(out).not.toHaveProperty("resourceId");
+    expect(out).not.toHaveProperty("_comment");
+    expect(out.alias).toBe("Lights");
+    expect(out.trigger).toEqual([{ platform: "state" }]);
+  });
+
+  it("keeps valid automation keys", () => {
+    const out = sanitizeAutomationPayload({ alias: "A", mode: "single", enabled: true, trigger: [], action: [] });
+    expect(out.mode).toBe("single");
+    expect(out.enabled).toBe(true);
+  });
+});
 
 describe("automation validation", () => {
   const client = new HomeAssistantClient("", "", "");

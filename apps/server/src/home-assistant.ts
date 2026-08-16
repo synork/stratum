@@ -17,6 +17,19 @@ export type HelperDomain = typeof helperDomains[number];
 
 const secretPattern = /(token|password|secret|api.?key|access.?key|code|credential)/i;
 
+// HA automation config schema accepts these top-level keys. Agents occasionally
+// include metadata keys (type, id, resourceId, _comment) which HA rejects with
+// "extra keys not allowed". Strip everything not in the whitelist so publishing
+// never fails on a stray field.
+export function sanitizeAutomationPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const allowed = new Set([
+    "alias", "description", "trigger", "condition", "action", "mode",
+    "max", "max_exceeded", "variables", "trigger_variables", "id",
+    "enabled", "initial_state",
+  ]);
+  return Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.has(key)));
+}
+
 function sanitizeAttributes(attributes: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(attributes).filter(([key]) => !secretPattern.test(key)));
 }
@@ -190,7 +203,8 @@ export class HomeAssistantClient {
   }
 
   async publishAutomation(id: string, payload: Record<string, unknown>): Promise<void> {
-    const response = await this.request(`/config/automation/config/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify(payload) });
+    const sanitized = sanitizeAutomationPayload(payload);
+    const response = await this.request(`/config/automation/config/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify(sanitized) });
     if (!response.ok) throw new Error(`Publish automation returned ${response.status}: ${await response.text()}`);
     const reload = await this.request("/services/automation/reload", { method: "POST", body: "{}" });
     if (!reload.ok) throw new Error(`Automation saved, but reload returned ${reload.status}`);
