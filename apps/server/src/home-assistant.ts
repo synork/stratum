@@ -27,7 +27,20 @@ export function sanitizeAutomationPayload(payload: Record<string, unknown>): Rec
     "max", "max_exceeded", "variables", "trigger_variables", "id",
     "enabled", "initial_state",
   ]);
-  return Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.has(key)));
+  // Optional keys HA types strictly as dictionaries; agents sometimes set
+  // them to strings/arrays/empty objects which HA rejects. Drop them unless
+  // they are genuinely non-empty plain objects.
+  const dictKeys = new Set(["variables", "trigger_variables"]);
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key]) => {
+      if (!allowed.has(key)) return false;
+      if (dictKeys.has(key)) {
+        const value = payload[key];
+        return Boolean(value) && typeof value === "object" && !Array.isArray(value) && Object.keys(value as Record<string, unknown>).length > 0;
+      }
+      return true;
+    }),
+  );
 }
 
 function sanitizeAttributes(attributes: Record<string, unknown>): Record<string, unknown> {

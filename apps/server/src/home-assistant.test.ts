@@ -23,6 +23,13 @@ describe("automation payload sanitization", () => {
     expect(out.mode).toBe("single");
     expect(out.enabled).toBe(true);
   });
+
+  it("drops empty or non-object trigger_variables/variables", () => {
+    expect(sanitizeAutomationPayload({ trigger_variables: {} })).not.toHaveProperty("trigger_variables");
+    expect(sanitizeAutomationPayload({ variables: "" })).not.toHaveProperty("variables");
+    expect(sanitizeAutomationPayload({ variables: [] })).not.toHaveProperty("variables");
+    expect(sanitizeAutomationPayload({ variables: { x: 1 } }).variables).toEqual({ x: 1 });
+  });
 });
 
 describe("automation validation", () => {
