@@ -141,7 +141,7 @@ export class Database {
     this.sqlite.prepare(`
       INSERT INTO proposals (id, type, resource_id, title, explanation, payload_json, status, validation_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET status = excluded.status, validation_json = excluded.validation_json, payload_json = excluded.payload_json
+      ON CONFLICT(id) DO UPDATE SET status = excluded.status, validation_json = excluded.validation_json, payload_json = excluded.payload_json, resource_id = excluded.resource_id, title = excluded.title
     `).run(
       proposal.id, proposal.type, proposal.resourceId, proposal.title, proposal.explanation,
       JSON.stringify(proposal.payload), proposal.status, JSON.stringify(proposal.validation), proposal.createdAt,
