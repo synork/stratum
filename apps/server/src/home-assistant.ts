@@ -245,6 +245,21 @@ export class HomeAssistantClient {
   }
 
   async publishDashboard(urlPath: string, payload: Record<string, unknown>): Promise<void> {
+    // HA's config/save only works against a dashboard that is already
+    // registered in storage. If the target url_path doesn't exist yet, create
+    // it first (same as the preview flow), otherwise saving fails with
+    // "Unknown config specified".
+    const dashboards = await this.wsCommand<LovelaceDashboard[]>("lovelace/dashboards/list");
+    if (!dashboards.some((dashboard) => dashboard.url_path === urlPath)) {
+      const title = typeof payload.title === "string" && payload.title.trim() ? payload.title : urlPath.replace(/[_-]+/g, " ");
+      await this.wsCommand("lovelace/dashboards/create", {
+        url_path: urlPath,
+        title,
+        mode: "storage",
+        require_admin: true,
+        show_in_sidebar: true,
+      });
+    }
     await this.wsCommand("lovelace/config/save", { url_path: urlPath, config: payload });
   }
 
