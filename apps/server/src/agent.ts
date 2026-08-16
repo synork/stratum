@@ -149,12 +149,13 @@ export function runAgent(
     draft_dashboard: tool({
       description: "Create a local Lovelace dashboard proposal for review. This does not publish or create a preview dashboard.",
       inputSchema: z.object({
-        resourceId: z.string().regex(/^[a-z0-9_-]+$/).describe("Target Lovelace URL path without slashes"),
+        resourceId: z.string().regex(/^[a-z0-9_-]+$/).refine((value) => value.includes("-"), "Home Assistant requires dashboard URL paths to contain a hyphen, e.g. 'living-room-dash'").describe("Target Lovelace URL path without slashes, must contain a hyphen"),
         title: z.string().min(1), explanation: z.string().min(1), config: z.record(z.string(), z.unknown()),
       }),
       execute: async ({ resourceId, title, explanation, config }) => {
+        const sanitized = resourceId.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
         const proposal = {
-          id: randomUUID(), type: "dashboard" as const, resourceId, title, explanation, payload: config,
+          id: randomUUID(), type: "dashboard" as const, resourceId: sanitized, title, explanation, payload: config,
           status: "draft" as const, validation: homeAssistant.validateDashboard(config), createdAt: new Date().toISOString(),
         };
         database.saveProposal(proposal);

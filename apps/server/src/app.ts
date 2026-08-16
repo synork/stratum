@@ -541,8 +541,10 @@ export async function createApp(deps: AppDeps): Promise<FastifyInstance> {
               ? await integrator.snapshot(proposal.resourceId)
               : null;
       if (proposal.type === "automation") await homeAssistant.publishAutomation(proposal.resourceId, proposal.payload);
-      else if (proposal.type === "dashboard")
+      else if (proposal.type === "dashboard") {
         await homeAssistant.publishDashboard(proposal.resourceId, proposal.payload);
+        proposal.resourceId = homeAssistant.resolveDashboardUrlPath(proposal.resourceId);
+      }
       else if (proposal.type === "integration") {
         const payload = proposal.payload as { domain: string; files: Record<string, string> };
         await integrator.write(payload.domain, payload.files);

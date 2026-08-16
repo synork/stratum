@@ -245,22 +245,37 @@ export class HomeAssistantClient {
   }
 
   async publishDashboard(urlPath: string, payload: Record<string, unknown>): Promise<void> {
+    // HA requires dashboard url_paths to contain a hyphen. Agents sometimes
+    // emit underscore-only slugs; repair them so the create doesn't reject.
+    const safeUrlPath = this.sanitizeDashboardUrlPath(urlPath);
     // HA's config/save only works against a dashboard that is already
     // registered in storage. If the target url_path doesn't exist yet, create
     // it first (same as the preview flow), otherwise saving fails with
     // "Unknown config specified".
     const dashboards = await this.wsCommand<LovelaceDashboard[]>("lovelace/dashboards/list");
-    if (!dashboards.some((dashboard) => dashboard.url_path === urlPath)) {
-      const title = typeof payload.title === "string" && payload.title.trim() ? payload.title : urlPath.replace(/[_-]+/g, " ");
+    if (!dashboards.some((dashboard) => dashboard.url_path === safeUrlPath)) {
+      const title = typeof payload.title === "string" && payload.title.trim() ? payload.title : safeUrlPath.replace(/[_-]+/g, " ");
       await this.wsCommand("lovelace/dashboards/create", {
-        url_path: urlPath,
+        url_path: safeUrlPath,
         title,
         mode: "storage",
         require_admin: true,
         show_in_sidebar: true,
       });
     }
-    await this.wsCommand("lovelace/config/save", { url_path: urlPath, config: payload });
+    await this.wsCommand("lovelace/config/save", { url_path: safeUrlPath, config: payload });
+  }
+
+  private sanitizeDashboardUrlPath(urlPath: string): string {
+    let clean = urlPath.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+    let dashCount = 0;
+    for (const ch of clean) if (ch === "-") dashCount++;
+    if (dashCount === 0) clean = `${clean}-dash`;
+    return clean;
+  }
+
+  resolveDashboardUrlPath(urlPath: string): string {
+    return this.sanitizeDashboardUrlPath(urlPath);
   }
 
   async createDashboardPreview(proposalId: string, title: string, payload: Record<string, unknown>): Promise<string> {
