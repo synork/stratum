@@ -1,4 +1,4 @@
-import { stepCountIs, streamText, tool, type ModelMessage } from "ai";
+import { streamText, tool, type ModelMessage, type StopCondition } from "ai";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import type { Database, StoredProvider } from "./database.js";
@@ -6,6 +6,21 @@ import { helperDomains, type HelperDomain, type HomeAssistantClient } from "./ho
 import { createModel } from "./providers.js";
 import type { ResearchTools } from "./research.js";
 import { validateIntegration } from "./integration.js";
+
+const MAX_STEPS = 20;
+
+// Stop the tool-calling loop when the last step finished with no pending tool
+// calls (the model produced its final answer). A hard cap guards against a
+// runaway loop. Using isStepCount(6) here aborts complex multi-tool tasks
+// mid-work, which is why the assistant sometimes appeared to stop suddenly.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const stopWhenNatural: StopCondition<any, any> = ({ steps }) => {
+  if (steps.length >= MAX_STEPS) return true;
+  const last = steps[steps.length - 1];
+  // If the model still has tool calls to execute, keep going; otherwise the
+  // answer is complete and we can stop.
+  return !(Array.isArray(last?.toolCalls) && last.toolCalls.length > 0);
+};
 
 const SYSTEM_PROMPT = `You are Stratum, a Home Assistant automation and dashboard workbench made by Synork.
 Use tools to inspect the actual installation before proposing entity IDs or behavior.
@@ -211,7 +226,7 @@ export function runAgent(
     system: `${SYSTEM_PROMPT}\nCurrent mode: ${mode}. ${mode === "build" ? "Inspect what is relevant, then create a local draft only when the request calls for one." : "Choose the relevant read and inspection tools, then explain findings and propose a plan. Do not create drafts in Plan mode."}${contextSummary ? `\n\nCompacted earlier thread context:\n${contextSummary}` : ""}`,
     messages,
     abortSignal,
-    stopWhen: stepCountIs(6),
+    stopWhen: stopWhenNatural,
     tools,
     activeTools: mode === "build" ? Object.keys(tools) as Array<keyof typeof tools> : ["search_entities", "list_entities", "list_areas", "list_devices", "list_automations", "inspect_automation", "list_dashboards", "inspect_dashboard", "get_entity_history", "get_logbook", "list_helpers", "web_search", "web_fetch", "stratum_github_search", "stratum_github_list", "stratum_github_read", "memory_search", "memory_save"],
   });
